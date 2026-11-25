@@ -12,7 +12,7 @@ export interface AuthResponse {
   user: AuthUser | null
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1'
 
 export async function getMe(): Promise<AuthResponse> {
   try {
@@ -34,7 +34,7 @@ export async function logoutUser(): Promise<void> {
 }
 
 export function getGoogleOAuthUrl(): string {
-  return `${API_BASE}/auth/google`
+  return `${API_BASE}/auth/demo`
 }
 
 export function getDemoLoginUrl(): string {

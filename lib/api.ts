@@ -1,7 +1,8 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5000/api/v1'
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || '/api/v1'
 
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
+  const url = path.startsWith('http') ? path : `${API_BASE}${path}`
+  const response = await fetch(url, {
     ...init,
     credentials: 'include',
     headers: {
