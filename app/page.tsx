@@ -198,9 +198,9 @@ function HomeContent() {
     try {
       const data = await getEmails({ status, search: query, page: 1, limit: 50 })
       setEmails(data)
-    } catch {
+    } catch (err: any) {
       setEmails([])
-      setError('Could not connect to the backend scheduler. Ensure backend service is running.')
+      setError(err?.message || 'Could not connect to the backend scheduler. Ensure backend service is running.')
     } finally {
       setBusy(false)
     }

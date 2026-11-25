@@ -4,9 +4,11 @@ import net from 'net'
 import path from 'path'
 
 export function isPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
+  if (process.env.VERCEL) return Promise.resolve(false)
+
   return new Promise((resolve) => {
     const socket = new net.Socket()
-    socket.setTimeout(1000)
+    socket.setTimeout(400)
     socket.on('connect', () => {
       socket.destroy()
       resolve(true)
@@ -24,6 +26,8 @@ export function isPortOpen(port: number, host = '127.0.0.1'): Promise<boolean> {
 }
 
 export async function ensureRedisRunning(): Promise<boolean> {
+  if (process.env.VERCEL) return false
+
   const open = await isPortOpen(6379)
   if (open) {
     console.log('✅ Redis is already running on port 6379.')
@@ -41,8 +45,8 @@ export async function ensureRedisRunning(): Promise<boolean> {
       })
       child.unref()
 
-      // Wait up to 3 seconds for port to open
-      for (let i = 0; i < 6; i++) {
+      // Wait up to 2 seconds for port to open
+      for (let i = 0; i < 4; i++) {
         await new Promise((r) => setTimeout(r, 500))
         if (await isPortOpen(6379)) {
           console.log('✅ Local Windows Redis server started successfully on port 6379.')

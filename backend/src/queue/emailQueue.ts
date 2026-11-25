@@ -59,6 +59,15 @@ export async function addEmailToQueue(
     fallbackTimers.delete(data.emailId)
   }
 
+  // If immediate, trigger execution right away so serverless functions don't freeze before delivery
+  if (delay <= 1000) {
+    import('./emailWorker')
+      .then(({ processEmailJobExecution }) => {
+        void processEmailJobExecution(data, data.emailId)
+      })
+      .catch(() => {})
+  }
+
   const timer = setTimeout(async () => {
     fallbackTimers.delete(data.emailId)
     const { processEmailJobExecution } = await import('./emailWorker')

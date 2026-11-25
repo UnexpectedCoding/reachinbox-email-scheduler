@@ -9,14 +9,18 @@ export function getElasticsearchClient(): Client {
   if (!esClient) {
     esClient = new Client({
       node: config.elasticsearch.node,
-      maxRetries: 3,
-      requestTimeout: 4000,
+      maxRetries: 0,
+      requestTimeout: 600,
     })
   }
   return esClient
 }
 
 export async function initElasticsearch(): Promise<void> {
+  if (process.env.VERCEL && config.elasticsearch.node.includes('localhost')) {
+    isEsAvailable = false
+    return
+  }
   const client = getElasticsearchClient()
   try {
     const ping = await client.ping()

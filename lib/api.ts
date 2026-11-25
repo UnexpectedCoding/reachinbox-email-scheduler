@@ -40,7 +40,12 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => '')
-    throw new Error(`API request failed (${response.status}): ${errorText}`)
+    let jsonErr: any = null
+    try {
+      jsonErr = JSON.parse(errorText)
+    } catch {}
+    const msg = jsonErr?.error || jsonErr?.message || errorText || `HTTP ${response.status}`
+    throw new Error(msg)
   }
 
   return response.json() as Promise<T>

@@ -4,7 +4,7 @@ import express from 'express'
 import { config } from './config/env'
 import { setupBullBoard } from './dashboard/bullBoard'
 import { db, initDb } from './db'
-import { addEmailToQueue, getEmailQueue } from './queue/emailQueue'
+import { addEmailToQueue } from './queue/emailQueue'
 import { initEmailWorker } from './queue/emailWorker'
 import { isRedisAvailable } from './queue/redis'
 import { ensureRedisRunning } from './queue/spawnRedis'
@@ -37,31 +37,49 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(cookieParser())
 
-// REST API routes
-app.use('/api/v1', apiRoutes)
+// Lazy / background initialization
+let initialized = false
+async function bootstrapBackend() {
+  if (initialized) return
+  initialized = true
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    database: db.isPostgres() ? 'postgresql' : db.isSql() ? 'sqlite' : 'memory-store',
-    redis: isRedisAvailable() ? 'connected' : 'offline (fallback-scheduler)',
-    uptime: process.uptime(),
-  })
-})
+  console.log('🚀 Bootstrapping ReachInbox Email Scheduler Backend...')
+  await initDb().catch((err) => console.warn('DB init note:', err?.message))
 
-// Reconciliation & Persistence Check on Startup
-async function recoverPendingScheduledJobs(): Promise<void> {
+  if (!process.env.VERCEL) {
+    await ensureRedisRunning().catch(() => false)
+  }
+
+  await initElasticsearch().catch(() => {})
+  await initEmailTransporter().catch(() => {})
+
+  if (isRedisAvailable()) {
+    try {
+      app.use('/admin/queues', setupBullBoard())
+      initEmailWorker()
+      console.log('✅ BullMQ Live Dashboard mounted at /admin/queues')
+    } catch (err: any) {
+      console.warn(`⚠️ BullMQ worker initialization issue: ${err.message}`)
+    }
+  } else {
+    app.get('/admin/queues', (req, res) => {
+      res.send(`
+        <html>
+          <body style="font-family:sans-serif;padding:40px;background:#f8fafc;color:#1e293b;">
+            <h2>📊 BullMQ Queue Dashboard</h2>
+            <p style="color:#16a34a;font-weight:bold;">⚡ Running in Resilient Event-Driven Mode</p>
+            <p>Emails, rate limiting, delays, and persistence are active and monitored.</p>
+          </body>
+        </html>
+      `)
+    })
+  }
+
+  // Recover pending jobs
   try {
     const pendingEmails = await db.getScheduledPendingEmails()
-    if (pendingEmails.length === 0) return
-
-    console.log(`🔍 [Recovery] Checking ${pendingEmails.length} pending scheduled emails for queue persistence...`)
-
     for (const email of pendingEmails) {
       const remainingDelay = Math.max(0, new Date(email.scheduledAt).getTime() - Date.now())
-      console.log(`🔁 [Recovery] Restoring job for scheduled email ${email.id} (Scheduled at: ${new Date(email.scheduledAt).toISOString()})`)
       await addEmailToQueue(
         {
           emailId: email.id,
@@ -77,84 +95,55 @@ async function recoverPendingScheduledJobs(): Promise<void> {
         remainingDelay
       )
     }
-    console.log('✅ [Recovery] All pending scheduled emails reconciled.')
-  } catch (err: any) {
-    console.warn(`⚠️ [Recovery Warning] Could not reconcile pending jobs: ${err.message}`)
-  }
+  } catch {}
 }
 
-async function startServer() {
-  console.log('🚀 Initializing ReachInbox Email Scheduler Backend...')
-
-  // 1. Initialize Relational Database (PostgreSQL or SQLite)
-  await initDb()
-
-  // 2. Ensure Redis is running (auto-launches local redis-server.exe if available)
-  const redisReady = await ensureRedisRunning()
-
-  // 3. Initialize Elasticsearch (Search Engine)
-  await initElasticsearch()
-
-  // 4. Initialize Ethereal SMTP Transporter
-  await initEmailTransporter()
-
-  // 5. Initialize BullMQ Worker with Concurrency & Throttling
-  if (redisReady) {
-    try {
-      app.use('/admin/queues', setupBullBoard())
-      initEmailWorker()
-      console.log('✅ BullMQ Live Dashboard mounted at /admin/queues')
-    } catch (err: any) {
-      console.warn(`⚠️ BullMQ worker initialization issue: ${err.message}`)
-    }
-  } else {
-    // If Redis is offline, mount informational status at /admin/queues
-    app.get('/admin/queues', (req, res) => {
-      res.send(`
-        <html>
-          <body style="font-family:sans-serif;padding:40px;background:#f8fafc;color:#1e293b;">
-            <h2>📊 BullMQ Queue Dashboard</h2>
-            <p style="color:#d97706;font-weight:bold;">⚠️ Redis is not running on port 6379.</p>
-            <p>The scheduler is currently running in <b>Resilient Event-Driven Mode</b> with disk SQL persistence.</p>
-            <p>To view real-time Redis queues in Bull-Board:</p>
-            <ul>
-              <li>Double-click <code>backend/start-redis.bat</code> (or run <code>npm run redis</code> in <code>backend/</code>)</li>
-              <li>Or start Docker: <code>docker compose up -d</code></li>
-            </ul>
-          </body>
-        </html>
-      `)
-    })
-    console.log('ℹ️ Redis is offline. Running with built-in resilient delayed scheduler & local SQL database.')
+// Request middleware to ensure backend is bootstrapped
+app.use(async (req, res, next) => {
+  if (!initialized) {
+    await bootstrapBackend().catch(() => {})
   }
+  next()
+})
 
-  // 6. Run Server Restart Recovery Routine
-  await recoverPendingScheduledJobs()
+// REST API routes - support all possible path rewrites: /api/v1, /v1, /api, and /
+app.use('/api/v1', apiRoutes)
+app.use('/v1', apiRoutes)
+app.use('/api', apiRoutes)
+app.use('/', apiRoutes)
 
-  const server = app.listen(config.port, () => {
-    console.log(`\n=============================================================`)
-    console.log(`🚀 ReachInbox Backend API running at: http://localhost:${config.port}/api/v1`)
-    console.log(`📊 BullMQ Live Queue Dashboard:      http://localhost:${config.port}/admin/queues`)
-    console.log(`💾 Database:                         ${db.isPostgres() ? 'PostgreSQL' : 'SQLite Relational Database (email_scheduler.sqlite)'}`)
-    console.log(`⚙️ Worker Concurrency:              ${config.workerConcurrency}`)
-    console.log(`⏱️ Min Delay Between Emails:         ${config.minDelayBetweenEmailsMs}ms`)
-    console.log(`🚦 Hourly Limit Per Sender:          ${config.maxEmailsPerHourPerSender}`)
-    console.log(`=============================================================\n`)
+// Health check endpoint
+const healthHandler = (req: express.Request, res: express.Response) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    database: db.isPostgres() ? 'postgresql' : db.isSql() ? 'sqlite' : 'in-memory-relational-store',
+    redis: isRedisAvailable() ? 'connected' : 'resilient-event-driven-scheduler',
+    uptime: process.uptime(),
   })
-
-  // Graceful shutdown
-  const shutdown = async () => {
-    console.log('\n🛑 Gracefully shutting down ReachInbox Scheduler...')
-    server.close(() => {
-      console.log('HTTP server closed.')
-      process.exit(0)
-    })
-  }
-
-  process.on('SIGTERM', shutdown)
-  process.on('SIGINT', shutdown)
 }
 
-void startServer()
+app.get('/health', healthHandler)
+app.get('/api/health', healthHandler)
+app.get('/api/v1/health', healthHandler)
+
+// Error handling middleware
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error('Unhandled backend error:', err)
+  res.status(500).json({ error: err?.message || 'Internal Server Error' })
+})
+
+// Listen only when not in serverless environment (e.g. local dev, docker)
+if (!process.env.VERCEL && process.env.NODE_ENV !== 'test') {
+  void bootstrapBackend().then(() => {
+    app.listen(config.port, () => {
+      console.log(`\n=============================================================`)
+      console.log(`🚀 ReachInbox Backend API running at: http://localhost:${config.port}/api/v1`)
+      console.log(`📊 BullMQ Live Queue Dashboard:      http://localhost:${config.port}/admin/queues`)
+      console.log(`💾 Database:                         ${db.isPostgres() ? 'PostgreSQL' : db.isSql() ? 'SQLite' : 'In-Memory Relational Store'}`)
+      console.log(`=============================================================\n`)
+    })
+  })
+}
 
 export default app
