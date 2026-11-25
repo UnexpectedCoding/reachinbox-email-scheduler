@@ -15,15 +15,7 @@
     },
     "backend": {
       "root": "backend",
-      "framework": "express",
-      "bindings": [
-        {
-          "type": "service",
-          "service": "app",
-          "format": "url",
-          "env": "APP_URL"
-        }
-      ]
+      "framework": "express"
     }
   },
   "rewrites": [

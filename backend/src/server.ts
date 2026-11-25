@@ -17,7 +17,19 @@ const app = express()
 // Middleware
 app.use(
   cors({
-    origin: [config.frontendUrl, 'http://localhost:3000', 'http://127.0.0.1:3000'],
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true)
+      const allowedOrigins = [
+        config.frontendUrl,
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:5000',
+      ].filter(Boolean)
+      if (allowedOrigins.length === 0 || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+        return callback(null, true)
+      }
+      return callback(null, true)
+    },
     credentials: true,
   })
 )
