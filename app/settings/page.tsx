@@ -21,7 +21,7 @@ export default function SettingsPage() {
         setConnected(x.connected)
         if (x.channel) setChannel(x.channel)
       })
-      .catch(() => setError('Unable to verify Slack connection. Ensure backend is running at http://localhost:5000.'))
+      .catch(() => setError('Unable to verify Slack connection. Ensure backend service is running.'))
       .finally(() => setLoading(false))
   }
 
@@ -83,7 +83,7 @@ export default function SettingsPage() {
                   <a
                     className="outline-button"
                     style={{ background: '#f8fafc', color: '#64748b' }}
-                    href="http://localhost:5000/api/v1/slack/demo-connect"
+                    href="/api/v1/slack/demo-connect"
                   >
                     Quick Test Connect
                   </a>
@@ -101,7 +101,7 @@ export default function SettingsPage() {
           </p>
           <div style={{ marginTop: '14px' }}>
             <a
-              href="http://localhost:5000/admin/queues"
+              href="/admin/queues"
               target="_blank"
               rel="noreferrer"
               className="outline-button"
@@ -115,9 +115,9 @@ export default function SettingsPage() {
         <section className="settings-section">
           <h2>System Health &amp; Endpoints</h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '11px', color: '#64748b', marginTop: '10px' }}>
-            <div>Backend API: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>http://localhost:5000/api/v1</code></div>
-            <div>Health check: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>http://localhost:5000/health</code></div>
-            <div>Bull-Board: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>http://localhost:5000/admin/queues</code></div>
+            <div>Backend API: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/api/v1</code></div>
+            <div>Health check: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/health</code></div>
+            <div>Bull-Board: <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px' }}>/admin/queues</code></div>
           </div>
         </section>
       </main>

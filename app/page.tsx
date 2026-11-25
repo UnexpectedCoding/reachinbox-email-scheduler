@@ -63,7 +63,7 @@ export function Sidebar({ active, user, onLogout }: { active: 'scheduled' | 'sen
           <Link href="/settings">
             <Settings size={14} /> Settings & integrations
           </Link>
-          <a href="http://localhost:5000/admin/queues" target="_blank" rel="noreferrer">
+          <a href="/admin/queues" target="_blank" rel="noreferrer">
             <ExternalLink size={14} /> Queue monitoring
           </a>
           <button
@@ -200,7 +200,7 @@ function HomeContent() {
       setEmails(data)
     } catch {
       setEmails([])
-      setError('Could not connect to the backend scheduler. Ensure backend is running at http://localhost:5000.')
+      setError('Could not connect to the backend scheduler. Ensure backend service is running.')
     } finally {
       setBusy(false)
     }
